@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 from dataclasses import dataclass
 
@@ -31,6 +32,7 @@ async def generate_context(video_path):
             _, encoded_frame = cv2.imencode(".jpg", frame)
             image_stream = io.BytesIO(encoded_frame.tobytes())
             image_data = image_stream.getvalue()
+            byte64_image_data = base64.b64encode(encoded_frame).decode("utf-8")
             second = frame_count / fps
             matching_sentences = [
                 sentence
@@ -39,7 +41,9 @@ async def generate_context(video_path):
             ]
             contexts.append(
                 FrameContext(
-                    image=image_data, transcript=matching_sentences, timestamp=second
+                    image=byte64_image_data,
+                    transcript=matching_sentences,
+                    timestamp=second,
                 )
             )
             frame_count += frame_interval
