@@ -1,0 +1,84 @@
+import moviepy.editor as mp
+import dotenv
+import os
+import asyncio
+import fastapi_poe as fp
+from openai import OpenAI,AsyncOpenAI
+from pydub import AudioSegment
+from dataclasses import dataclass
+import re
+import uuid
+from typing import List
+dotenv.load_dotenv()
+
+@dataclass
+class TranscriptSentence:
+    text: str
+    timestamp: float
+
+
+def extract_audio_from_video(video_file_path: str, output_audio_file_path: str) -> None:
+    video = mp.VideoFileClip(video_file_path)
+    audio = video.audio
+    audio.write_audiofile(output_audio_file_path)
+
+async def get_responses(api_key: str, messages: List[str]) -> None:
+    async for partial in fp.get_bot_response(messages=messages, bot_name="GPT-3.5-Turbo", api_key=api_key):
+        print(partial)
+
+def get_audio_segment_size(audio_segment: AudioSegment) -> int:
+    return len(audio_segment.raw_data)
+
+def split_wav_file(file_path: str, segment_size_mb: int = 20) -> List[str]:
+    audio = AudioSegment.from_wav(file_path)
+    segment_size_bytes = segment_size_mb * 1024 * 1024
+    bytes_per_ms = len(audio.raw_data) / len(audio)
+    segment_duration_ms = segment_size_bytes / bytes_per_ms
+    
+    start = 0
+    end = len(audio)
+    segment_index = 0
+    output_files = []
+    while start < end:
+        segment_end = min(start + segment_duration_ms, end)
+        segment = audio[start:segment_end]
+        
+        unique_id = uuid.uuid4()
+        output_file = f"audio_segments/{unique_id}_segment_{segment_index}.wav"
+        segment.export(output_file, format="wav")
+        output_files.append(output_file)
+        
+        start = segment_end
+        segment_index += 1
+    return output_files
+
+async def get_transcription_async(audio_file_path: str) -> List[TranscriptSentence]:
+    audio_file = open(audio_file_path, "rb")
+    transcription = []
+    transcript = await AsyncOpenAI().audio.transcriptions.create(
+        file=audio_file,
+        model="whisper-1",
+        response_format="verbose_json",
+        timestamp_granularities=["segment"]
+    )
+    for segment in transcript.model_extra['segments']:
+        transcription.append(TranscriptSentence(segment['text'], segment['end']))
+    return transcription
+
+async def transcribe_segments(file_path: str, segment_size_mb: int = 20) -> List[TranscriptSentence]:
+    output_files = split_wav_file(file_path, segment_size_mb)
+    tasks = [get_transcription_async(output_file) for output_file in output_files]
+    transcriptions = await asyncio.gather(*tasks)
+    combined_transcription = [sentence for transcription in transcriptions for sentence in transcription]
+    return combined_transcription
+
+async def process_video(video_file_path: str) -> List[TranscriptSentence]:
+    audio_file_path = f"audio_segments/{uuid.uuid4().hex}.wav"
+    extract_audio_from_video(video_file_path, audio_file_path)
+    transcription = await transcribe_segments(audio_file_path)
+    return transcription
+
+if __name__ == "__main__":
+    video_file_path = 'recording.mp4'
+    transcription = asyncio.run(process_video(video_file_path))
+    print(transcription)
