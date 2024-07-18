@@ -1,12 +1,13 @@
 import moviepy.editor as mp
 import dotenv
 import os
+import dill
 import asyncio
 import fastapi_poe as fp
 from openai import OpenAI,AsyncOpenAI
 from pydub import AudioSegment
 from dataclasses import dataclass
-import re
+import hashlib
 import uuid
 from typing import List
 dotenv.load_dotenv()
@@ -21,6 +22,21 @@ def extract_audio_from_video(video_file_path: str, output_audio_file_path: str) 
     video = mp.VideoFileClip(video_file_path)
     audio = video.audio
     audio.write_audiofile(output_audio_file_path)
+
+def encode_filename(filename):
+    """
+    Encode the given filename using SHA-256 hashing.
+    """
+    # Create a SHA-256 hash object
+    sha256 = hashlib.sha256()
+    
+    # Encode the filename to bytes and update the hash object
+    sha256.update(filename.encode())
+    
+    # Get the hexadecimal representation of the hash
+    encoded_filename = sha256.hexdigest()
+    
+    return encoded_filename
 
 async def get_responses(api_key: str, messages: List[str]) -> None:
     async for partial in fp.get_bot_response(messages=messages, bot_name="GPT-3.5-Turbo", api_key=api_key):
@@ -73,9 +89,13 @@ async def transcribe_segments(file_path: str, segment_size_mb: int = 20) -> List
     return combined_transcription
 
 async def process_video(video_file_path: str) -> List[TranscriptSentence]:
+    transcription_file = encode_filename(video_file_path)
+    if os.path.exists(f"transcriptions/{transcription_file}.dill"):
+        return dill.load(open(f"transcriptions/{transcription_file}.dill", "rb"))
     audio_file_path = f"audio_segments/{uuid.uuid4().hex}.wav"
     extract_audio_from_video(video_file_path, audio_file_path)
     transcription = await transcribe_segments(audio_file_path)
+    dill.dump(transcription, open(f"transcriptions/{transcription_file}.dill", "wb"))
     return transcription
 
 if __name__ == "__main__":
