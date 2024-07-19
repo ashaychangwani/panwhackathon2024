@@ -96,7 +96,7 @@ async def process_subtask(
             ),
             ChatCompletionSystemMessageParam(
                 role="system",
-                content='Place screenshots in the to make the result clearer. Use the format ![<image title>](<timestamp>.png) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output. eg "![Terminal Window with YAML](1234.png)" for the frame at timestamp 1234 seconds',
+                content='Place screenshots in the to make the result clearer. Use the format ![<image title>](<timestamp>.jpg) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output. eg "![Terminal Window with YAML](1234.jpg)" for the frame at timestamp 1234 seconds',
             ),
         ]
     )
@@ -109,7 +109,7 @@ async def process_subtask(
 
 def prepare_frames(response: str, video_path: str) -> None:
     timestamps = [
-        match for match in re.findall(r"!\[.*?\]\((\d+(\.\d+)?)\.png\)", response)
+        match for match in re.findall(r"!\[.*?\]\((\d+(\.\d+)?)\.jpg\)", response)
     ]
     generate_frames(video_path, timestamps)
 
@@ -195,7 +195,7 @@ async def process_file(
     messages.append(
         ChatCompletionUserMessageParam(
             role="user",
-            content='Given the above tool responses, stitch it all together in as much detail as humanly possible. Make sure to be as thorough as possible without leaving behind any details. Make it as long as possible. Use markdown formatting. Use the format ![<image title>](<timestamp>.png) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output. eg "![Terminal Window with YAML](1234.png)" for the frame at timestamp 1234 seconds.',
+            content='Given the above tool responses, stitch it all together in as much detail as humanly possible. Make sure to be as thorough as possible without leaving behind any details. Make it as long as possible. Use markdown formatting. Use the format ![<image title>](<timestamp>.jpg) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output. eg "![Terminal Window with YAML](1234.jpg)" for the frame at timestamp 1234 seconds.',
         )
     )
     tasks_status[task_id].append("Stitching all subtasks together")

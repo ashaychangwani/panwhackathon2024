@@ -178,7 +178,7 @@ def generate_frames(video_path: str, timestamps: List[str]) -> None:
             print(f"Frame not found at timestamp {timestamp}.")
             continue
         _, encoded_frame = cv2.imencode(".jpg", frame)
-        with open(f"frames/{timestamp}.png", "wb") as f:
+        with open(f"frames/{timestamp}.jpg", "wb") as f:
             f.write(encoded_frame)
     cap.release()
 
