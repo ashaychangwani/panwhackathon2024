@@ -88,7 +88,7 @@ async def process_subtask(
             ),
             ChatCompletionSystemMessageParam(
                 role="system",
-                content="Place screenshots in the to make the result clearer. Use the format ![image](<timestamp: int>.png) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output.",
+                content='Place screenshots in the to make the result clearer. Use the format ![<image title>](<timestamp>.png) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output. eg "![Terminal Window with YAML](1234.png)" for the frame at timestamp 1234 seconds',
             ),
         ]
     )
@@ -173,7 +173,7 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
     messages.append(
         ChatCompletionUserMessageParam(
             role="user",
-            content="Given the above tool responses, stitch it all together in as much detail as humanly possible. Make sure to be as thorough as possible without leaving behind any details. Make it as long as possible. Use markdown formatting. Use the format ![image](<timestamp: int>.png) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output.",
+            content='Given the above tool responses, stitch it all together in as much detail as humanly possible. Make sure to be as thorough as possible without leaving behind any details. Make it as long as possible. Use markdown formatting. Use the format ![<image title>](<timestamp>.png) to represent Frames present in the context. Ensure that timestamp of the screenshot is present in the context, only then you can use it in the output. eg "![Terminal Window with YAML](1234.png)" for the frame at timestamp 1234 seconds.',
         )
     )
 

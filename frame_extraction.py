@@ -128,7 +128,7 @@ def process_context(context: List[TranscriptSentence | Frame]):
     # this function will combine transcript sentences into a single object
     new_context = []
     running_object = None
-    for obj in enumerate(context):
+    for obj in context:
         if isinstance(obj, Frame):
             if running_object is not None:
                 new_context.append(
@@ -181,7 +181,7 @@ async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
         transcript_sentences = await process_video(video_path)
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_interval = 3
+        frame_interval = 5
         frames = []
         prev_frame = None
         frame_count = 0
