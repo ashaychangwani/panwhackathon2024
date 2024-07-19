@@ -71,6 +71,7 @@ def get_audio_segment_size(audio_segment: AudioSegment) -> int:
 def split_wav_file(file_path: str, segment_size_mb: int = 20) -> List[str]:
     audio = AudioSegment.from_wav(file_path)
     segment_size_bytes = segment_size_mb * 1024 * 1024
+    base_path, _ = os.path.splitext(os.path.basename(file_path))
     bytes_per_ms = len(audio.raw_data) / len(audio)
     segment_duration_ms = segment_size_bytes / bytes_per_ms
 
@@ -81,9 +82,7 @@ def split_wav_file(file_path: str, segment_size_mb: int = 20) -> List[str]:
     while start < end:
         segment_end = min(start + segment_duration_ms, end)
         segment = audio[start:segment_end]
-
-        unique_id = uuid.uuid4()
-        output_file = f"audio_segments/{unique_id}_segment_{segment_index}.wav"
+        output_file = f"audio_segments/{base_path}_segment_{segment_index}.wav"
         segment.export(output_file, format="wav")
         output_files.append(output_file)
 
@@ -109,6 +108,7 @@ async def get_transcription_async(
                 segment["text"], round(segment["end"] + start_timestamp, 1)
             )
         )
+    print(f"Transcribed {audio_file_path}")
     return transcription
 
 
@@ -132,17 +132,16 @@ async def transcribe_segments(
 async def process_video(video_file_path: str) -> List[TranscriptSentence]:
     transcription_file = encode_filename(video_file_path)
     if os.path.exists(f"transcriptions/{transcription_file}.dill"):
-        loaded_transcription = dill.load(
+        transcription = dill.load(
             open(f"transcriptions/{transcription_file}.dill", "rb")
         )
-        transcription = [
-            TranscriptSentence(**sentence.__dict__) for sentence in loaded_transcription
-        ]
-        return transcription
-    audio_file_path = f"audio_segments/{uuid.uuid4().hex}.wav"
-    extract_audio_from_video(video_file_path, audio_file_path)
-    transcription = await transcribe_segments(audio_file_path)
-    dill.dump(transcription, open(f"transcriptions/{transcription_file}.dill", "wb"))
+    else:
+        audio_file_path = f"audio_segments/{transcription_file}.wav"
+        extract_audio_from_video(video_file_path, audio_file_path)
+        transcription = await transcribe_segments(audio_file_path)
+        dill.dump(
+            transcription, open(f"transcriptions/{transcription_file}.dill", "wb")
+        )
     return transcription
 
 

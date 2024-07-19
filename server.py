@@ -19,12 +19,13 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential
 from frame_extraction import (
     Frame,
     TranscriptSentence,
+    encode_filename,
     generate_context,
     generate_frames,
 )
 
 client = AzureOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
+    api_key=os.getenv("AZURE_API_KEY"),
     azure_endpoint=os.getenv("AZURE_ENDPOINT"),
     api_version="2024-02-15-preview",
 )
@@ -91,9 +92,12 @@ def prepare_frames(response: str, video_path: str) -> None:
 
 
 async def process_file(video_file_path: str, description: str) -> List[str]:
-    # context = await generate_context(video_file_path)
-    with open("combined_context.dill", "rb") as f:
-        context = dill.load(f)
+    encoded_video_file = encode_filename(video_file_path)
+    if os.path.exists(f"context/{encoded_video_file}.dill"):
+        context = dill.load(open(f"context/{encoded_video_file}.dill", "rb"))
+    else:
+        context = await generate_context(video_file_path)
+        dill.dump(context, open(f"context/{encoded_video_file}.dill", "wb"))
 
     tools = [
         {
@@ -163,19 +167,3 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
     response = await call_openai(messages)
     prepare_frames(response, video_file_path)
     return response
-
-
-# if __name__ == "__main__":
-
-# video_path = "recording.mp4"
-# description = "Generate a detailed runbook with the contents of this entire meeting"
-# captions = asyncio.run(process_file(video_path, description=description))
-# with open("captions.dill", "wb") as f:
-#     dill.dump(captions, f)
-
-# if os.path.exists("captions.dill"):
-#     with open("captions.dill", "rb") as f:
-#         captions = dill.load(f)
-#         with open("frames/output.md", "w") as f:
-#             f.write(captions)
-#         prepare_frames(captions, "recording.mp4")
