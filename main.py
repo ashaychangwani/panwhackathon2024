@@ -1,10 +1,12 @@
 import asyncio
+import time
 import uuid
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
 
+from frame_extraction import generate_context
 from server import process_file
 from shared_state import TaskStatus, tasks_status
 from transcription import process_video
@@ -24,7 +26,7 @@ async def root():
 
 
 @app.post("/process")
-def process_video_endpoint(video: Video, background_tasks: BackgroundTasks):
+async def process_video_endpoint(video: Video, background_tasks: BackgroundTasks):
     task_id = str(uuid.uuid4())
     tasks_status[task_id] = TaskStatus()
 
@@ -34,11 +36,10 @@ def process_video_endpoint(video: Video, background_tasks: BackgroundTasks):
     return {"task_id": task_id, "status": "Task started"}
 
 
-async def process_file_task(task_id: str, video_url: str, objective: str):
+def process_file_task(task_id: str, video_url: str, objective: str):
     tasks_status[task_id].append("Downloading video")
     tasks_status[task_id].complete("Downloading video")
-    await process_video(video_url, task_id)
-    # await process_file(video_url, objective, task_id)
+    asyncio.run(process_file(video_url, objective, task_id))
 
 
 @app.get("/status/{task_id}")

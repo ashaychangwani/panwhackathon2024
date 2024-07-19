@@ -17,6 +17,7 @@ from openai.types.chat.chat_completion_message_param import (
 )
 from skimage.metrics import structural_similarity as ssim
 
+from shared_state import TaskStatus, tasks_status
 from transcription import TranscriptSentence, process_video
 
 client = AzureOpenAI(
@@ -124,7 +125,7 @@ def caption_image(
     return response.choices[0].message.content
 
 
-def process_context(context: List[TranscriptSentence | Frame]):
+def process_context(context: List[TranscriptSentence | Frame], task_id: str):
     # this function will combine transcript sentences into a single object
     new_context = []
     running_object = None
@@ -135,11 +136,15 @@ def process_context(context: List[TranscriptSentence | Frame]):
                     ChatCompletionUserMessageParam(role="user", content=running_object)
                 )
                 running_object = None
-            obj.set_caption(caption_image(obj, new_context, running_object))
-            new_context.append(obj)
-            print(
-                f"Processed image {len([1 for obj in new_context if isinstance(obj, Frame)])} of total images {len([1 for obj in context if isinstance(obj, Frame)])} at timestamp {obj.timestamp}"
+            tasks_status[task_id].append(
+                f"Contextualizing frame {len([1 for obj in new_context if isinstance(obj, Frame)])} of total {len([1 for obj in context if isinstance(obj, Frame)])}"
             )
+            obj.set_caption(caption_image(obj, new_context, running_object))
+            tasks_status[task_id].complete(
+                f"Contextualizing frame {len([1 for obj in new_context if isinstance(obj, Frame)])} of total {len([1 for obj in context if isinstance(obj, Frame)])}"
+            )
+            new_context.append(obj)
+
         elif isinstance(obj, TranscriptSentence):
             if running_object is None:
                 running_object = [
@@ -176,9 +181,13 @@ def generate_frames(video_path: str, timestamps: List[int]) -> None:
     cap.release()
 
 
-async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
+async def generate_context(
+    video_path, task_id: str
+) -> List[Frame | TranscriptSentence]:
     try:
-        transcript_sentences = await process_video(video_path)
+        tasks_status[task_id].append("Transcribing video")
+        transcript_sentences = await process_video(video_path, task_id)
+        tasks_status[task_id].complete("Transcribing video")
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_interval = 5
@@ -186,6 +195,7 @@ async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
         prev_frame = None
         frame_count = 0
 
+        tasks_status[task_id].append("Extracting important frames from video")
         while True:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
             ret, frame = cap.read()
@@ -198,9 +208,6 @@ async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
                 is_different = await calculate_ssim(frame, prev_frame) < 0.97
 
             if is_different:
-                print(
-                    f"[{frame_count / fps} / {cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps}] Frame added"
-                )
                 _, encoded_frame = cv2.imencode(".jpg", frame)
                 byte64_image_data = base64.b64encode(encoded_frame).decode("utf-8")
                 second = frame_count / fps
@@ -215,14 +222,18 @@ async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
             frame_count += int(fps * frame_interval)
 
         cap.release()
+        tasks_status[task_id].complete("Extracting important frames from video")
+
         combined_context = frames + transcript_sentences
         combined_context.sort(key=lambda x: x.timestamp)
-        combined_context = process_context(combined_context)
+        tasks_status[task_id].append("Generating context")
+        combined_context = process_context(combined_context, task_id)
+        tasks_status[task_id].complete("Generating context")
         return combined_context
     except Exception as e:
-        print(f"Error: {e}")
+        tasks_status[task_id].append(f"Error: {e}")
         return []
 
 
 if __name__ == "__main__":
-    asyncio.run(generate_context("recording.mp4"))
+    asyncio.run(generate_context("recording.mp4", "example_task_id"))

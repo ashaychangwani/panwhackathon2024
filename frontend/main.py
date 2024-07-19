@@ -14,8 +14,10 @@ def main():
         if uploaded_file is not None and objective:
             token = uploaded_file.name  # Use the filename as a token
             data = {"video_url": token, "objective": objective}
-            response = requests.post("http://localhost:8080/process", json=data)
-
+            print(data)
+            response = requests.post(
+                "http://localhost:8080/process", json=data, timeout=10
+            )
             if response.status_code == 200:
                 task_id = response.json()["task_id"]
                 st.success("Data successfully sent to the server!")
