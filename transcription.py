@@ -10,6 +10,11 @@ import dotenv
 import fastapi_poe as fp
 import moviepy.editor as mp
 from openai import AsyncOpenAI, OpenAI
+from openai.types.chat.chat_completion_message_param import (
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from pydub import AudioSegment
 
 dotenv.load_dotenv()
@@ -22,6 +27,12 @@ class TranscriptSentence:
 
     def __str__(self) -> str:
         return f"[{self.timestamp}] {self.text}"
+
+    def to_openai_message(self):
+        return ChatCompletionUserMessageParam(
+            role="user",
+            content=str(self),
+        )
 
 
 def extract_audio_from_video(video_file_path: str, output_audio_file_path: str) -> None:

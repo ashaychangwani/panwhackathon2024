@@ -7,6 +7,11 @@ from typing import List
 
 import cv2
 import numpy as np
+from openai.types.chat.chat_completion_message_param import (
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from skimage.metrics import structural_similarity as ssim
 
 from transcription import TranscriptSentence, process_video
@@ -17,6 +22,18 @@ class Frame:
     image: bytes
     timestamp: float
 
+    def to_openai_message(self):
+        return ChatCompletionUserMessageParam(
+            role="user",
+            content=[
+                {"type": "text", "text": f"Frame at {self.timestamp} seconds"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{self.image}"},
+                },
+            ],
+        )
+
 
 async def calculate_ssim(frame1, frame2):
     # Resize frames to speed up SSIM calculation
@@ -25,6 +42,40 @@ async def calculate_ssim(frame1, frame2):
     return ssim(
         frame1_resized, frame2_resized, channel_axis=len(frame1_resized.shape) - 1
     )
+
+
+def process_context(context: List[TranscriptSentence | Frame]):
+    # this function will combine transcript sentences into a single object
+    new_context = []
+    running_object = None
+    for obj in context:
+        if isinstance(obj, Frame):
+            if running_object is not None:
+                new_context.append(
+                    ChatCompletionUserMessageParam(role="user", content=running_object)
+                )
+                running_object = None
+            new_context.append(obj.to_openai_message())
+        elif isinstance(obj, TranscriptSentence):
+            if running_object is None:
+                running_object = [
+                    {
+                        "type": "text",
+                        "text": str(obj),
+                    }
+                ]
+            else:
+                running_object.append(
+                    {
+                        "type": "text",
+                        "text": str(obj),
+                    }
+                )
+    if running_object is not None:
+        new_context.append(
+            ChatCompletionUserMessageParam(role="user", content=running_object)
+        )
+    return new_context
 
 
 async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
@@ -49,7 +100,9 @@ async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
                 is_different = await calculate_ssim(frame, prev_frame) < 0.97
 
             if is_different:
-                print(f"[{frame_count / fps}")
+                print(
+                    f"[{frame_count / fps} / {cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps}] Frame added"
+                )
                 _, encoded_frame = cv2.imencode(".jpg", frame)
                 byte64_image_data = base64.b64encode(encoded_frame).decode("utf-8")
                 second = frame_count / fps
@@ -66,6 +119,7 @@ async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
         cap.release()
         combined_context = frames + transcript_sentences
         combined_context.sort(key=lambda x: x.timestamp)
+        combined_context = process_context(combined_context)
         return combined_context
     except Exception as e:
         print(f"Error: {e}")
