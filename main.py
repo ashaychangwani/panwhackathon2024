@@ -1,10 +1,13 @@
 import asyncio
+import uuid
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
 
 from server import process_file
+from shared_state import TaskStatus, tasks_status
+from transcription import process_video
 
 
 class Video(BaseModel):
@@ -20,20 +23,28 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.get("/process")
-async def process_video(video: Video):
-    video_url = video.video_url
-    objective = video.objective
-    return await process_file(video_url, objective)
+@app.post("/process")
+def process_video_endpoint(video: Video, background_tasks: BackgroundTasks):
+    task_id = str(uuid.uuid4())
+    tasks_status[task_id] = TaskStatus()
+
+    background_tasks.add_task(
+        process_file_task, task_id, video.video_url, video.objective
+    )
+    return {"task_id": task_id, "status": "Task started"}
 
 
-@app.post("/upload")
-async def upload_output(video: Video):
-    return await (video.video_url, video.objective)
+async def process_file_task(task_id: str, video_url: str, objective: str):
+    tasks_status[task_id].append("Downloading video")
+    tasks_status[task_id].complete("Downloading video")
+    await process_video(video_url, task_id)
+    # await process_file(video_url, objective, task_id)
+
+
+@app.get("/status/{task_id}")
+async def poll_status(task_id: str):
+    return {"status": tasks_status.get(task_id, None).tasks}
 
 
 if __name__ == "__main__":
-    # uvicorn.run(app, port=8080, host="0.0.0.0")
-    asyncio.run(
-        process_video(Video(video_url="recording.mp4", objective="Generate a runbook"))
-    )
+    uvicorn.run(app, port=8080, host="0.0.0.0", reload=True)

@@ -18,6 +18,8 @@ from openai.types.chat.chat_completion_message_param import (
 )
 from pydub import AudioSegment
 
+from shared_state import tasks_status
+
 dotenv.load_dotenv()
 
 
@@ -36,7 +38,9 @@ class TranscriptSentence:
         )
 
 
-def extract_audio_from_video(video_file_path: str, output_audio_file_path: str) -> None:
+async def extract_audio_from_video(
+    video_file_path: str, output_audio_file_path: str
+) -> None:
     video = mp.VideoFileClip(video_file_path)
     audio = video.audio
     audio.write_audiofile(output_audio_file_path)
@@ -93,7 +97,7 @@ def split_wav_file(file_path: str, segment_size_mb: int = 20) -> List[str]:
 
 
 async def get_transcription_async(
-    audio_file_path: str, start_timestamp: float
+    audio_file_path: str, start_timestamp: float, task_id: str, segment_number: int
 ) -> List[TranscriptSentence]:
     def time_to_seconds(time_str):
         h, m, s_ms = time_str.split(":")
@@ -101,12 +105,14 @@ async def get_transcription_async(
         return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
 
     transcription = []
+    tasks_status[task_id].append(f"Transcribing segment {segment_number}")
     transcript = await AsyncOpenAI().audio.transcriptions.create(
         file=open(audio_file_path, "rb"),
         model="whisper-1",
         response_format="srt",
         timestamp_granularities=["segment"],
     )
+    tasks_status[task_id].complete(f"Transcribing segment {segment_number}")
     pattern = re.compile(
         r"\d+\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.*?)\n\n",
         re.DOTALL,
@@ -121,44 +127,63 @@ async def get_transcription_async(
             for match in matches
         ]
     )
-    print(f"Transcribed {audio_file_path}")
     return transcription
 
 
 async def transcribe_segments(
-    file_path: str, segment_size_mb: int = 24
+    file_path: str, task_id: str, segment_size_mb: int = 24
 ) -> List[TranscriptSentence]:
+    tasks_status[task_id].append(f"Splitting audio into segments")
+    tasks = []
     output_files = split_wav_file(file_path, segment_size_mb)
+    tasks_status[task_id].complete(f"Splitting audio into segments")
     tasks = []
     cumulative_duration = 0.0
-    for output_file in output_files:
+    tasks_status[task_id].append(
+        f"Concurrently transcribing all {len(output_files)} segments"
+    )
+    for idx, output_file in enumerate(output_files):
         audio_segment = AudioSegment.from_wav(output_file)
-        tasks.append(get_transcription_async(output_file, cumulative_duration))
+        tasks.append(
+            asyncio.create_task(
+                get_transcription_async(output_file, cumulative_duration, task_id, idx)
+            )
+        )
         cumulative_duration += len(audio_segment) / 1000.0
     transcriptions = await asyncio.gather(*tasks)
+    tasks_status[task_id].complete(
+        f"Concurrently transcribing all {len(output_files)} segments"
+    )
+    tasks_status[task_id].delete_prefix("Transcribing segment ")
     combined_transcription = [
         sentence for transcription in transcriptions for sentence in transcription
     ]
     return combined_transcription
 
 
-async def process_video(video_file_path: str) -> List[TranscriptSentence]:
+async def process_video(video_file_path: str, task_id: str) -> List[TranscriptSentence]:
     transcription_file = encode_filename(video_file_path)
+
     if os.path.exists(f"transcriptions/{transcription_file}.dill"):
+        tasks_status[task_id].append("Loading transcription from cache")
         transcription = dill.load(
             open(f"transcriptions/{transcription_file}.dill", "rb")
         )
+        tasks_status[task_id].complete("Loading transcription from cache")
     else:
+        tasks_status[task_id].append("Extracting audio from video")
         audio_file_path = f"audio_segments/{transcription_file}.wav"
-        extract_audio_from_video(video_file_path, audio_file_path)
-        transcription = await transcribe_segments(audio_file_path)
+        tasks_status[task_id].complete("Extracting audio from video")
+        await extract_audio_from_video(video_file_path, audio_file_path)
+        transcription = await transcribe_segments(audio_file_path, task_id)
         dill.dump(
             transcription, open(f"transcriptions/{transcription_file}.dill", "wb")
         )
+
     return transcription
 
 
 if __name__ == "__main__":
     video_file_path = "recording.mp4"
-    transcription = asyncio.run(process_video(video_file_path))
+    transcription = asyncio.run(process_video(video_file_path), "tmp")
     print(transcription)

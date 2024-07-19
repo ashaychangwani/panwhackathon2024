@@ -17,24 +17,31 @@ def main():
             response = requests.post("http://localhost:8080/process", json=data)
 
             if response.status_code == 200:
+                task_id = response.json()["task_id"]
                 st.success("Data successfully sent to the server!")
                 status_placeholder = st.empty()
                 while True:
                     status_response = requests.get(
-                        f"http://localhost:8080/status/{token}"
+                        f"http://localhost:8080/status/{task_id}"
                     )
                     if status_response.status_code == 200:
                         status_data = status_response.json()
-                        status_placeholder.text(
-                            f"Processing status: {status_data['status']}"
+                        status_list = status_data.get("status", [])
+                        status_text = "\n".join(
+                            f"- {'✅' if item['status'] == 'completed' else '🔄'} {item['description']}"
+                            for item in status_list
                         )
-                        if status_data["status"] == "completed":
+                        status_placeholder.markdown(status_text)
+                        if len(status_list) > 0 and all(
+                            item["status"] == "completed" for item in status_list
+                        ):
                             st.success("Processing completed!")
+                            print(status_list)
                             break
                     else:
                         st.error("Failed to get status from the server.")
                         break
-                    time.sleep(5)
+                    time.sleep(1)
             else:
                 st.error("Failed to send data to the server.")
         else:
