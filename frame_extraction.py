@@ -13,9 +13,8 @@ from transcription import TranscriptSentence, process_video
 
 
 @dataclass
-class FrameContext:
+class Frame:
     image: bytes
-    transcript: List[TranscriptSentence]
     timestamp: float
 
 
@@ -28,13 +27,13 @@ async def calculate_ssim(frame1, frame2):
     )
 
 
-async def generate_context(video_path) -> List[FrameContext]:
+async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
     try:
         transcript_sentences = await process_video(video_path)
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_interval = 3
-        contexts = []
+        frames = []
         prev_frame = None
         frame_count = 0
 
@@ -54,15 +53,9 @@ async def generate_context(video_path) -> List[FrameContext]:
                 _, encoded_frame = cv2.imencode(".jpg", frame)
                 byte64_image_data = base64.b64encode(encoded_frame).decode("utf-8")
                 second = frame_count / fps
-                matching_sentences = [
-                    sentence
-                    for sentence in transcript_sentences
-                    if abs(sentence.timestamp - second) <= 30
-                ]
-                contexts.append(
-                    FrameContext(
+                frames.append(
+                    Frame(
                         image=byte64_image_data,
-                        transcript=matching_sentences,
                         timestamp=second,
                     )
                 )
@@ -71,7 +64,9 @@ async def generate_context(video_path) -> List[FrameContext]:
             frame_count += int(fps * frame_interval)
 
         cap.release()
-        return contexts
+        combined_context = frames + transcript_sentences
+        combined_context.sort(key=lambda x: x.timestamp)
+        return combined_context
     except Exception as e:
         print(f"Error: {e}")
         return []
