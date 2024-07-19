@@ -43,7 +43,7 @@ async def process_file_task(task_id: str, video_url: str, objective: str):
 
 @app.get("/status/{task_id}")
 async def poll_status(task_id: str):
-    return {"status": tasks_status.get(task_id, None).tasks}
+    return {"status": tasks_status.get(task_id, None).get_tasks()}
 
 
 if __name__ == "__main__":

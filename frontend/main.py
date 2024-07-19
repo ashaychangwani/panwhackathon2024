@@ -32,8 +32,8 @@ def main():
                             for item in status_list
                         )
                         status_placeholder.markdown(status_text)
-                        if len(status_list) > 0 and all(
-                            item["status"] == "completed" for item in status_list
+                        if any(
+                            item["description"] == "completed" for item in status_list
                         ):
                             st.success("Processing completed!")
                             print(status_list)
