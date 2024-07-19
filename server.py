@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import List
 
@@ -15,8 +16,12 @@ from openai.types.chat.chat_completion_message_param import (
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
-from frame_extraction import Frame, generate_context
-from transcription import TranscriptSentence
+from frame_extraction import (
+    Frame,
+    TranscriptSentence,
+    generate_context,
+    generate_frames,
+)
 
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
@@ -76,6 +81,13 @@ async def process_subtask(
     response = await call_openai(messages)
     print("done processing subtask")
     return response
+
+
+def prepare_frames(response: str, video_path: str) -> None:
+    timestamps = [
+        int(match) for match in re.findall(r"!\[image\]\((\d+)\.png\)", response)
+    ]
+    generate_frames(video_path, timestamps)
 
 
 async def process_file(video_file_path: str, description: str) -> List[str]:
@@ -149,15 +161,21 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
     )
 
     response = await call_openai(messages)
-
+    prepare_frames(response, video_file_path)
     return response
 
 
-if __name__ == "__main__":
-    import asyncio
+# if __name__ == "__main__":
 
-    video_path = "recording.mp4"
-    description = "Generate a detailed runbook with the contents of this entire meeting"
-    captions = asyncio.run(process_file(video_path, description=description))
-    with open("captions.dill", "wb") as f:
-        dill.dump(captions, f)
+# video_path = "recording.mp4"
+# description = "Generate a detailed runbook with the contents of this entire meeting"
+# captions = asyncio.run(process_file(video_path, description=description))
+# with open("captions.dill", "wb") as f:
+#     dill.dump(captions, f)
+
+# if os.path.exists("captions.dill"):
+#     with open("captions.dill", "rb") as f:
+#         captions = dill.load(f)
+#         with open("frames/output.md", "w") as f:
+#             f.write(captions)
+#         prepare_frames(captions, "recording.mp4")

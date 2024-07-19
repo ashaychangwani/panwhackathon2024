@@ -160,6 +160,20 @@ def process_context(context: List[TranscriptSentence | Frame]):
     return new_context
 
 
+def generate_frames(video_path: str, timestamps: List[int]) -> None:
+    cap = cv2.VideoCapture(video_path)
+    for i, timestamp in enumerate(timestamps):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(timestamp * cap.get(cv2.CAP_PROP_FPS)))
+        ret, frame = cap.read()
+        if not ret:
+            print(f"Frame not found at timestamp {timestamp}.")
+            continue
+        _, encoded_frame = cv2.imencode(".jpg", frame)
+        with open(f"frames/{timestamp}.png", "wb") as f:
+            f.write(encoded_frame)
+    cap.release()
+
+
 async def generate_context(video_path) -> List[Frame | TranscriptSentence]:
     try:
         transcript_sentences = await process_video(video_path)

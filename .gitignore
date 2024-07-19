@@ -5,3 +5,4 @@
 **/*.pyc
 gcp_creds.json
 *.jpg
+frames/*
