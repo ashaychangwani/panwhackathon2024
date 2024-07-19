@@ -167,10 +167,12 @@ def process_context(context: List[TranscriptSentence | Frame], task_id: str):
     return new_context
 
 
-def generate_frames(video_path: str, timestamps: List[int]) -> None:
+def generate_frames(video_path: str, timestamps: List[str]) -> None:
     cap = cv2.VideoCapture(video_path)
-    for i, timestamp in enumerate(timestamps):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(timestamp * cap.get(cv2.CAP_PROP_FPS)))
+    for i, (timestamp, _) in enumerate(timestamps):
+        cap.set(
+            cv2.CAP_PROP_POS_FRAMES, int(float(timestamp)) * cap.get(cv2.CAP_PROP_FPS)
+        )
         ret, frame = cap.read()
         if not ret:
             print(f"Frame not found at timestamp {timestamp}.")

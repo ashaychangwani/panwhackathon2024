@@ -109,7 +109,7 @@ async def process_subtask(
 
 def prepare_frames(response: str, video_path: str) -> None:
     timestamps = [
-        int(match) for match in re.findall(r"!\[.*?\]\((\d+)\.png\)", response)
+        match for match in re.findall(r"!\[.*?\]\((\d+(\.\d+)?)\.png\)", response)
     ]
     generate_frames(video_path, timestamps)
 
@@ -213,8 +213,14 @@ async def process_file(
 
 if __name__ == "__main__":
     video_file_path = "recording.mp4"  # Replace with the actual path to your video
-    description = "Generate a detailed runbook from the following video"
-    response = asyncio.run(
-        process_file(video_file_path, description, "example_task_id")
-    )
-    print(response)
+    # description = "Generate a detailed runbook from the following video"
+    # response = asyncio.run(
+    #     process_file(video_file_path, description, "example_task_id")
+    # )
+    # print(response)
+
+    encoded_video_file = encode_filename(video_file_path)
+    base_path, _ = os.path.splitext(os.path.basename(encoded_video_file))
+    with open(f"frames/{base_path}.md", "r") as f:
+        response = f.read()
+    prepare_frames(response, video_file_path)
