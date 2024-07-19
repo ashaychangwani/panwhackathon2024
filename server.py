@@ -25,7 +25,7 @@ client = AzureOpenAI(
 )
 
 
-@retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(12))
+# @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(12))
 async def call_openai(
     messages: List[ChatCompletionMessageParam | Frame],
     tools: List[ChatCompletionToolParam] = None,
@@ -74,6 +74,7 @@ async def process_subtask(
         ]
     )
     response = await call_openai(messages)
+    print("done processing subtask")
     return response
 
 
@@ -112,7 +113,7 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
     messages.append(
         ChatCompletionSystemMessageParam(
             role="system",
-            content="To perform this task, break it down into subtasks and provide detailed instructions for each subtask. Make the subtasks as detailed and nuanced as possible so that the topic is covered in thorough detail.",
+            content="To perform this task, break it down into subtasks and provide detailed instructions for each subtask. Make the subtasks as detailed and nuanced as possible so that the topic is covered in thorough detail. More subtasks is better than larger subtasks.",
         )
     )
     response, tool_calls = await call_openai(messages, tools)
@@ -121,21 +122,23 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
         available_functions = {
             "process_subtask": process_subtask,
         }
-        for tool_call in tool_calls:
-            function_name = tool_call.function.name
-            function_to_call = available_functions[function_name]
-            function_args = json.loads(tool_call.function.arguments)
-            function_response = await function_to_call(
+        subtasks = [
+            available_functions[tool_call.function.name](
                 context=context,
                 description=description,
-                subtask=function_args["subtask"],
+                subtask=json.loads(tool_call.function.arguments)["subtask"],
             )
+            for tool_call in tool_calls
+        ]
+        print(f"starting to process {len(subtasks)} subtasks")
+        tool_responses = await asyncio.gather(*subtasks)
+        for tool_call, tool_response in zip(tool_calls, tool_responses):
             messages.append(
                 {
                     "tool_call_id": tool_call.id,
                     "role": "tool",
-                    "name": function_name,
-                    "content": function_response,
+                    "name": tool_call.function.name,
+                    "content": tool_response,
                 }
             )
     messages.append(
@@ -145,7 +148,7 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
         )
     )
 
-    await call_openai(messages)
+    response = await call_openai(messages)
 
     return response
 
