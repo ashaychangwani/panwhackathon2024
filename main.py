@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from frame_extraction import generate_context
 from server import process_file
 from shared_state import TaskStatus, tasks_status
-from transcription import process_video
+from transcription import encode_filename
 
 
 class Video(BaseModel):
@@ -46,6 +46,11 @@ def process_file_task(task_id: str, video_url: str, objective: str):
 @app.get("/status/{task_id}")
 async def poll_status(task_id: str):
     return {"status": tasks_status.get(task_id, None).get_tasks()}
+
+
+@app.get("/display/{token}")
+async def display_content(token: str):
+    return {"text": open(f"frames/{encode_filename(token)}.md", "r").read()}
 
 
 if __name__ == "__main__":
