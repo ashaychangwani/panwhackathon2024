@@ -10,7 +10,7 @@ import dill
 import dotenv
 import fastapi_poe as fp
 import moviepy.editor as mp
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI, AuthenticationError, OpenAI
 from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -106,12 +106,17 @@ async def get_transcription_async(
 
     transcription = []
     tasks_status[task_id].append(f"Transcribing segment {segment_number}")
-    transcript = await AsyncOpenAI().audio.transcriptions.create(
-        file=open(audio_file_path, "rb"),
-        model="whisper-1",
-        response_format="srt",
-        timestamp_granularities=["segment"],
-    )
+    api_key = os.getenv("OPENAI_API_KEY")
+    try:
+        transcript = await AsyncOpenAI(api_key=api_key).audio.transcriptions.create(
+            file=open(audio_file_path, "rb"),
+            model="whisper-1",
+            response_format="srt",
+            timestamp_granularities=["segment"],
+        )
+    except AuthenticationError:
+        print(f"Invalid API Key: {api_key}")
+
     tasks_status[task_id].complete(f"Transcribing segment {segment_number}")
     pattern = re.compile(
         r"\d+\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.*?)\n\n",

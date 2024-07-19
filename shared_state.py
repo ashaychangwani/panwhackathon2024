@@ -44,7 +44,7 @@ class TaskStatus:
                         self._summarize_task("Transcribing segment ", "Transcribed")
                     )
                     transcribed_added = True
-            elif task["description"].startswith("Contextualizing image "):
+            elif task["description"].startswith("Contextualizing frame "):
                 if not contextualized_added:
                     output_tasks.append(
                         self._summarize_task("Contextualizing frame ", "Contextualized")
