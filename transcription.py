@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from typing import List
@@ -94,26 +95,38 @@ def split_wav_file(file_path: str, segment_size_mb: int = 20) -> List[str]:
 async def get_transcription_async(
     audio_file_path: str, start_timestamp: float
 ) -> List[TranscriptSentence]:
-    audio_file = open(audio_file_path, "rb")
+    def time_to_seconds(time_str):
+        h, m, s_ms = time_str.split(":")
+        s, ms = s_ms.split(",")
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
     transcription = []
     transcript = await AsyncOpenAI().audio.transcriptions.create(
-        file=audio_file,
+        file=open(audio_file_path, "rb"),
         model="whisper-1",
-        response_format="verbose_json",
+        response_format="srt",
         timestamp_granularities=["segment"],
     )
-    for segment in transcript.model_extra["segments"]:
-        transcription.append(
+    pattern = re.compile(
+        r"\d+\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n(.*?)\n\n",
+        re.DOTALL,
+    )
+    matches = pattern.findall(transcript)
+    transcription.extend(
+        [
             TranscriptSentence(
-                segment["text"], round(segment["end"] + start_timestamp, 1)
+                match[2].replace("\n", " "),
+                round(time_to_seconds(match[1]) + start_timestamp, 1),
             )
-        )
+            for match in matches
+        ]
+    )
     print(f"Transcribed {audio_file_path}")
     return transcription
 
 
 async def transcribe_segments(
-    file_path: str, segment_size_mb: int = 20
+    file_path: str, segment_size_mb: int = 24
 ) -> List[TranscriptSentence]:
     output_files = split_wav_file(file_path, segment_size_mb)
     tasks = []
