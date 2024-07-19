@@ -2,6 +2,7 @@ import asyncio
 import base64
 import io
 from dataclasses import dataclass
+from typing import List
 
 import cv2
 
@@ -11,11 +12,11 @@ from transcription import TranscriptSentence, process_video
 @dataclass
 class FrameContext:
     image: bytes
-    transcript: list[TranscriptSentence]
+    transcript: List[TranscriptSentence]
     timestamp: float
 
 
-async def generate_context(video_path):
+async def generate_context(video_path) -> List[FrameContext]:
     try:
         transcript_sentences = await process_video(video_path)
         cap = cv2.VideoCapture(video_path)
@@ -30,8 +31,6 @@ async def generate_context(video_path):
             if not ret:
                 break
             _, encoded_frame = cv2.imencode(".jpg", frame)
-            image_stream = io.BytesIO(encoded_frame.tobytes())
-            image_data = image_stream.getvalue()
             byte64_image_data = base64.b64encode(encoded_frame).decode("utf-8")
             second = frame_count / fps
             matching_sentences = [

@@ -20,6 +20,9 @@ class TranscriptSentence:
     text: str
     timestamp: float
 
+    def __str__(self) -> str:
+        return f"[{self.timestamp}] {self.text}"
+
 
 def extract_audio_from_video(video_file_path: str, output_audio_file_path: str) -> None:
     video = mp.VideoFileClip(video_file_path)
@@ -91,7 +94,9 @@ async def get_transcription_async(
     )
     for segment in transcript.model_extra["segments"]:
         transcription.append(
-            TranscriptSentence(segment["text"], segment["end"] + start_timestamp)
+            TranscriptSentence(
+                segment["text"], round(segment["end"] + start_timestamp, 1)
+            )
         )
     return transcription
 
@@ -116,7 +121,13 @@ async def transcribe_segments(
 async def process_video(video_file_path: str) -> List[TranscriptSentence]:
     transcription_file = encode_filename(video_file_path)
     if os.path.exists(f"transcriptions/{transcription_file}.dill"):
-        return dill.load(open(f"transcriptions/{transcription_file}.dill", "rb"))
+        loaded_transcription = dill.load(
+            open(f"transcriptions/{transcription_file}.dill", "rb")
+        )
+        transcription = [
+            TranscriptSentence(**sentence.__dict__) for sentence in loaded_transcription
+        ]
+        return transcription
     audio_file_path = f"audio_segments/{uuid.uuid4().hex}.wav"
     extract_audio_from_video(video_file_path, audio_file_path)
     transcription = await transcribe_segments(audio_file_path)
