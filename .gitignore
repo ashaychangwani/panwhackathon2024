@@ -3,3 +3,5 @@
 *.mp4
 **/*.dill
 **/*.pyc
+gcp_creds.json
+*.jpg
