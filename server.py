@@ -10,6 +10,7 @@ from typing import List
 import dill
 from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAI
 from openai.types.chat.chat_completion_message_param import (
+    ChatCompletionAssistantMessageParam,
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
@@ -200,7 +201,7 @@ async def process_file(
     )
     tasks_status[task_id].append("Stitching all subtasks together")
     response = await call_openai(messages)
-    messages.append(response)
+    messages.append(ChatCompletionSystemMessageParam(role="system", content=response))
     tasks_status[task_id].complete("Stitching all subtasks together")
     tasks_status[task_id].append("Generating frames for the final output")
     prepare_frames(response, video_file_path)
@@ -212,6 +213,74 @@ async def process_file(
         dill.dump(messages, f)
     tasks_status[task_id].finished(True)
     return response
+
+
+async def get_conversation_response(conversation, token):
+    file_name = token
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "reply",
+                "description": "Reply to the user",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reply": {
+                            "type": "string",
+                            "description": "The reply to be sent back to the user",
+                        },
+                    },
+                    "required": ["reply"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "modify",
+                "description": "Reply the FINALANSWER",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "modification": {
+                            "type": "string",
+                            "description": "The modification to be made to the FINALANSWER, only if the user has asked for a modification",
+                        },
+                    },
+                    "required": ["modification"],
+                },
+            },
+        },
+    ]
+    with open(f"conversation/{encode_filename(file_name)}.dill", "rb") as f:
+        messages = dill.load(f)
+    last_response = messages[-1]  ##temporary
+    messages = messages[:-1]  ##temporary
+    messages.append(
+        ChatCompletionAssistantMessageParam(
+            role="assistant",
+            content=f"FINALANSWER FINALANSWER FINALANSWER: {last_response}",
+        )
+    )  ##temporary
+    for message in conversation.messages:
+        messages.append({"role": "user", "content": message["user"]})
+        messages.append({"role": "system", "content": message["system"]})
+    messages.append({"role": "user", "content": conversation.text})
+    messages.append(
+        ChatCompletionSystemMessageParam(
+            role="system",
+            content="Use the reply_and_modify function to respond to the user. Only modify the FINALANSWER if the user has asked for it. If modifying, return the entire FINALANSWER without any placeholders. Do not skip any lines.",
+        )
+    )
+    response, tool_calls = await call_openai(messages, tools)
+    if tool_calls:
+        obj = json.loads(tool_calls[0].function.arguments)
+        return {
+            "text": obj["reply"],
+            "modification": obj["modification"],
+        }
+    return {"text": response}
 
 
 if __name__ == "__main__":

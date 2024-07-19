@@ -1,13 +1,14 @@
 import asyncio
 import time
 import uuid
+from typing import List
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
 
 from frame_extraction import generate_context
-from server import process_file
+from server import get_conversation_response, process_file
 from shared_state import TaskStatus, tasks_status
 from transcription import encode_filename
 
@@ -15,6 +16,16 @@ from transcription import encode_filename
 class Video(BaseModel):
     video_url: str
     objective: str
+
+
+class Message(BaseModel):
+    role: str
+    content: str
+
+
+class Conversation(BaseModel):
+    messages: List[Message]
+    text: str
 
 
 app = FastAPI()
@@ -51,6 +62,11 @@ async def poll_status(task_id: str):
 @app.get("/display/{token}")
 async def display_content(token: str):
     return {"text": open(f"frames/{encode_filename(token)}.md", "r").read()}
+
+
+@app.post("/conversation/{token}")
+def get_response(conversation: Conversation, token: str):
+    return asyncio.run(get_conversation_response(conversation, token))
 
 
 if __name__ == "__main__":

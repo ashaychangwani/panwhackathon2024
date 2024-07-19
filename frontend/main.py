@@ -1,3 +1,4 @@
+import difflib
 import re
 import time
 from io import BytesIO  # Add this import
@@ -32,13 +33,12 @@ def main():
     with st.sidebar:
         messages = st.container(height=600)
         if prompt := st.chat_input("Say something"):
-            response = get_chatbot_response(prompt)
-            st.session_state.conversation.append(
-                {"user": prompt, "assistant": response}
-            )
+            messages.chat_message("user").write(prompt)
+            response = get_chatbot_response(prompt, uploaded_file.name)
+            st.session_state.conversation.append({"user": prompt, "system": response})
     for message in st.session_state.conversation:
-        messages.chat_message("user").write(f"User: {message['user']}")
-        messages.chat_message("assistant").write(f"Assistant: {message['assistant']}")
+        messages.chat_message("user").write(f"{message['user']}")
+        messages.chat_message("system").write(f"{message['system']}")
 
     if submit_button:
         if uploaded_file is not None and objective:
@@ -108,9 +108,16 @@ def main():
                 )
 
 
-def get_chatbot_response(user_input):
-    # Dummy response for the chatbot
-    return "This is a dummy response. Replace this with actual chatbot logic."
+def get_chatbot_response(user_input, token):
+    conversation = {
+        "messages": st.session_state.conversation,
+        "text": user_input,
+    }
+    response = requests.post(
+        f"http://localhost:8080/conversation/{token}", json=conversation, timeout=120
+    )
+    print(response.json())
+    return response.json()["text"]
 
 
 def st_markdown(markdown_string):
@@ -122,6 +129,38 @@ def st_markdown(markdown_string):
             title = part
         else:
             st.image(f"../frames/{part}")  # Add caption if you want -> , caption=title
+
+
+def show_diffs(text1, text2):
+    """
+    Compare two texts word by word and return the differences with highlighting in Markdown format.
+
+    Arguments:
+    text1 -- The first text to compare
+    text2 -- The second text to compare
+
+    Returns:
+    diff -- The differences between the two texts with highlighting in Markdown format
+    """
+    diff = difflib.Differ().compare(text1.split(), text2.split())
+    diff_output = []
+
+    for item in diff:
+        prefix = item[0]
+        word = item[2:]
+
+        if prefix == "-":
+            diff_output.append(f":red[{word.strip()}]")
+
+        elif prefix == "+":
+            diff_output.append(f":green[{word.strip()}]")
+
+        elif prefix == "?":
+            continue
+        else:
+            diff_output.append(word.strip())
+
+    return " ".join(diff_output)
 
 
 import base64
