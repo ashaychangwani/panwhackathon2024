@@ -29,6 +29,7 @@ async def root():
 async def process_video_endpoint(video: Video, background_tasks: BackgroundTasks):
     task_id = str(uuid.uuid4())
     tasks_status[task_id] = TaskStatus()
+    tasks_status[task_id].empty()
 
     background_tasks.add_task(
         process_file_task, task_id, video.video_url, video.objective

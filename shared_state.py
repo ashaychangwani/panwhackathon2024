@@ -55,7 +55,10 @@ class TaskStatus:
         return output_tasks
 
     def finished(self, bool=True):
-        self.tasks.append({"description": "completed", "status": "completed"})
+        self.tasks = [{"description": "completed", "status": "completed"}]
+
+    def empty(self):
+        self.tasks = []
 
 
 tasks_status = dict()

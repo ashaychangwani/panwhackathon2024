@@ -14,7 +14,6 @@ def main():
         if uploaded_file is not None and objective:
             token = uploaded_file.name  # Use the filename as a token
             data = {"video_url": token, "objective": objective}
-            print(data)
             response = requests.post(
                 "http://localhost:8080/process", json=data, timeout=10
             )
@@ -38,7 +37,6 @@ def main():
                             item["description"] == "completed" for item in status_list
                         ):
                             st.success("Processing completed!")
-                            print(status_list)
                             break
                     else:
                         st.error("Failed to get status from the server.")
