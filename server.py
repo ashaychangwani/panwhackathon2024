@@ -99,7 +99,7 @@ async def process_subtask(
 
 def prepare_frames(response: str, video_path: str) -> None:
     timestamps = [
-        int(match) for match in re.findall(r"!\[image\]\((\d+)\.png\)", response)
+        int(match) for match in re.findall(r"!\[.*?\]\((\d+)\.png\)", response)
     ]
     generate_frames(video_path, timestamps)
 
@@ -160,6 +160,9 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
             for tool_call in tool_calls
         ]
         print(f"starting to process {len(subtasks)} subtasks")
+        print(
+            f"Subtasks are: {[json.loads(tool_call.function.arguments)['subtask'] for tool_call in tool_calls]}"
+        )
         tool_responses = await asyncio.gather(*subtasks)
         for tool_call, tool_response in zip(tool_calls, tool_responses):
             messages.append(
