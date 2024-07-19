@@ -20,7 +20,7 @@ from skimage.metrics import structural_similarity as ssim
 from transcription import TranscriptSentence, process_video
 
 client = AzureOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
+    api_key=os.getenv("AZURE_API_KEY"),
     azure_endpoint=os.getenv("AZURE_ENDPOINT"),
     api_version="2024-02-15-preview",
 )
@@ -119,7 +119,7 @@ def caption_image(
     )
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini", messages=messages, max_tokens=512
+        model="gpt-4o", messages=messages, max_tokens=512
     )
     return response.choices[0].message.content
 
@@ -128,7 +128,7 @@ def process_context(context: List[TranscriptSentence | Frame]):
     # this function will combine transcript sentences into a single object
     new_context = []
     running_object = None
-    for idx, obj in enumerate(context):
+    for obj in enumerate(context):
         if isinstance(obj, Frame):
             if running_object is not None:
                 new_context.append(
@@ -137,6 +137,9 @@ def process_context(context: List[TranscriptSentence | Frame]):
                 running_object = None
             obj.set_caption(caption_image(obj, new_context, running_object))
             new_context.append(obj)
+            print(
+                f"Processed image {len([1 for obj in new_context if isinstance(obj, Frame)])} of total images {len([1 for obj in context if isinstance(obj, Frame)])} at timestamp {obj.timestamp}"
+            )
         elif isinstance(obj, TranscriptSentence):
             if running_object is None:
                 running_object = [
@@ -152,7 +155,6 @@ def process_context(context: List[TranscriptSentence | Frame]):
                         "text": str(obj),
                     }
                 )
-        print(f"Processed {idx + 1} of {len(context)} at timestamp {obj.timestamp}")
     if running_object is not None:
         new_context.append(
             ChatCompletionUserMessageParam(role="user", content=running_object)

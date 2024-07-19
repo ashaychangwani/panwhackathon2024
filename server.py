@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -14,15 +15,20 @@ from openai.types.chat.chat_completion_message_param import (
     ChatCompletionUserMessageParam,
 )
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
-from tenacity import retry, stop_after_attempt, wait_random_exponential
+from tenacity import (
+    before_sleep_log,
+    retry,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 from frame_extraction import (
     Frame,
     TranscriptSentence,
-    encode_filename,
     generate_context,
     generate_frames,
 )
+from transcription import encode_filename
 
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_API_KEY"),
@@ -30,8 +36,15 @@ client = AzureOpenAI(
     api_version="2024-02-15-preview",
 )
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# @retry(wait=wait_random_exponential(min=1, max=120), stop=stop_after_attempt(12))
+
+@retry(
+    wait=wait_random_exponential(min=1, max=120),
+    stop=stop_after_attempt(12),
+    before_sleep=before_sleep_log(logger, logging.ERROR),
+)
 async def call_openai(
     messages: List[ChatCompletionMessageParam | Frame],
     tools: List[ChatCompletionToolParam] = None,
@@ -166,4 +179,14 @@ async def process_file(video_file_path: str, description: str) -> List[str]:
 
     response = await call_openai(messages)
     prepare_frames(response, video_file_path)
+    base_path, _ = os.path.splitext(os.path.basename(encoded_video_file))
+    with open(f"frames/{base_path}.md", "w") as f:
+        f.write(response)
     return response
+
+
+if __name__ == "__main__":
+    video_file_path = "recording.mp4"  # Replace with the actual path to your video
+    description = "Generate a detailed runbook from the following video"
+    response = asyncio.run(process_file(video_file_path, description))
+    print(response)
