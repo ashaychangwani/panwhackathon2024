@@ -1,12 +1,15 @@
 import asyncio
 import base64
 import io
+import os
 import time
 from dataclasses import dataclass
 from typing import List
 
 import cv2
+import dill
 import numpy as np
+from openai import AzureOpenAI
 from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -15,6 +18,12 @@ from openai.types.chat.chat_completion_message_param import (
 from skimage.metrics import structural_similarity as ssim
 
 from transcription import TranscriptSentence, process_video
+
+client = AzureOpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+    api_version="2024-02-15-preview",
+)
 
 
 @dataclass
@@ -34,6 +43,9 @@ class Frame:
             ],
         )
 
+    def set_caption(self, caption):
+        self.caption = caption
+
 
 async def calculate_ssim(frame1, frame2):
     # Resize frames to speed up SSIM calculation
@@ -44,18 +56,75 @@ async def calculate_ssim(frame1, frame2):
     )
 
 
+def caption_image(
+    image: Frame,
+    new_context: List[ChatCompletionUserMessageParam],
+    running_object: List[dict],
+):
+    messages = []
+    for obj in new_context:
+        if isinstance(obj, Frame):
+            messages.append(
+                ChatCompletionUserMessageParam(
+                    role="user",
+                    content=[
+                        {
+                            "type": "text",
+                            "text": f"Frame at {obj.timestamp} seconds. Caption: {obj.caption}",
+                        }
+                    ],
+                )
+            )
+        else:
+            messages.append(obj)
+    if running_object is not None:
+        messages.append(
+            ChatCompletionUserMessageParam(
+                role="user",
+                content=running_object,
+            )
+        )
+    messages.append(
+        ChatCompletionSystemMessageParam(
+            role="system",
+            content=f"Be as detailed as possible. The frame is from a screenshot in a virtual presentation. Understand what is the highlight and caption to gather the most relevant and useful information. The caption should contain all of the relevant information in the slides/frame while also including the textual transcript. Do not repeat any information already included in the captions of the above frames. Caption only the primary forcus of the frame. Do not include any irrelevant information that is not the focus of the presentation. If anything has changed in the frame compared to the last frame, include every relevant change in the caption.",
+        )
+    )
+    messages.append(
+        ChatCompletionUserMessageParam(
+            role="user",
+            content=[
+                {
+                    "type": "text",
+                    "text": f"Given the above context, caption this frame that was captured at timestamp: {image.timestamp} seconds.",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image.image}"},
+                },
+            ],
+        )
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini", messages=messages, max_tokens=512
+    )
+    return response.choices[0].message.content
+
+
 def process_context(context: List[TranscriptSentence | Frame]):
     # this function will combine transcript sentences into a single object
     new_context = []
     running_object = None
-    for obj in context:
+    for idx, obj in enumerate(context):
         if isinstance(obj, Frame):
             if running_object is not None:
                 new_context.append(
                     ChatCompletionUserMessageParam(role="user", content=running_object)
                 )
                 running_object = None
-            new_context.append(obj.to_openai_message())
+            obj.set_caption(caption_image(obj, new_context, running_object))
+            new_context.append(obj)
         elif isinstance(obj, TranscriptSentence):
             if running_object is None:
                 running_object = [
@@ -71,6 +140,7 @@ def process_context(context: List[TranscriptSentence | Frame]):
                         "text": str(obj),
                     }
                 )
+        print(f"Processed {idx + 1} of {len(context)} at timestamp {obj.timestamp}")
     if running_object is not None:
         new_context.append(
             ChatCompletionUserMessageParam(role="user", content=running_object)
