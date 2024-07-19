@@ -19,6 +19,15 @@ class FrameContext:
     timestamp: float
 
 
+async def calculate_ssim(frame1, frame2):
+    # Resize frames to speed up SSIM calculation
+    frame1_resized = cv2.resize(frame1, (320, 240))
+    frame2_resized = cv2.resize(frame2, (320, 240))
+    return ssim(
+        frame1_resized, frame2_resized, channel_axis=len(frame1_resized.shape) - 1
+    )
+
+
 async def generate_context(video_path) -> List[FrameContext]:
     try:
         transcript_sentences = await process_video(video_path)
@@ -35,10 +44,13 @@ async def generate_context(video_path) -> List[FrameContext]:
             if not ret:
                 break
 
-            if (
-                prev_frame is None
-                or ssim(frame, prev_frame, channel_axis=len(frame.shape) - 1) < 0.97
-            ):
+            if prev_frame is None:
+                is_different = True
+            else:
+                is_different = await calculate_ssim(frame, prev_frame) < 0.97
+
+            if is_different:
+                print(f"[{frame_count / fps}")
                 _, encoded_frame = cv2.imencode(".jpg", frame)
                 byte64_image_data = base64.b64encode(encoded_frame).decode("utf-8")
                 second = frame_count / fps
