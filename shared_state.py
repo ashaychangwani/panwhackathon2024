@@ -8,7 +8,8 @@ class TaskStatus:
         for task in self.tasks:
             if task["description"] == message:
                 task["status"] = "completed"
-                break
+                return
+        self.tasks.append({"description": message, "status": "completed"})
 
     def delete_prefix(self, message):
         self.tasks = [

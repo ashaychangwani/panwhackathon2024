@@ -200,6 +200,7 @@ async def process_file(
     )
     tasks_status[task_id].append("Stitching all subtasks together")
     response = await call_openai(messages)
+    messages.append(response)
     tasks_status[task_id].complete("Stitching all subtasks together")
     tasks_status[task_id].append("Generating frames for the final output")
     prepare_frames(response, video_file_path)
@@ -207,6 +208,8 @@ async def process_file(
     base_path, _ = os.path.splitext(os.path.basename(encoded_video_file))
     with open(f"frames/{base_path}.md", "w") as f:
         f.write(response)
+    with open(f"conversation/{base_path}.dill", "wb") as f:
+        dill.dump(messages, f)
     tasks_status[task_id].finished(True)
     return response
 

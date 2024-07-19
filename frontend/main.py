@@ -8,6 +8,10 @@ from fpdf import FPDF  # Add this import
 
 st.set_page_config(layout="centered")
 
+# Initialize session state for conversation history
+if "conversation" not in st.session_state:
+    st.session_state.conversation = []
+
 
 def main():
     st.title("SirSleepsALot")
@@ -24,6 +28,17 @@ def main():
         export_button = st.button("Export")
     with col4:
         download_button = st.button("Download PDF")
+
+    with st.sidebar:
+        messages = st.container(height=600)
+        if prompt := st.chat_input("Say something"):
+            response = get_chatbot_response(prompt)
+            st.session_state.conversation.append(
+                {"user": prompt, "assistant": response}
+            )
+    for message in st.session_state.conversation:
+        messages.chat_message("user").write(f"User: {message['user']}")
+        messages.chat_message("assistant").write(f"Assistant: {message['assistant']}")
 
     if submit_button:
         if uploaded_file is not None and objective:
@@ -91,6 +106,11 @@ def main():
                 st.error(
                     "File has not been processed yet. Please wait for the processing to complete."
                 )
+
+
+def get_chatbot_response(user_input):
+    # Dummy response for the chatbot
+    return "This is a dummy response. Replace this with actual chatbot logic."
 
 
 def st_markdown(markdown_string):
